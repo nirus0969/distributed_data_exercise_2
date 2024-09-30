@@ -12,7 +12,7 @@ class ExampleProgram:
         self.db_connection = self.connection.db_connection
         self.cursor = self.connection.cursor
         self.users_with_labels: list[str] = self.initialize_users_with_labels()
-        self.valid_files: dict[str, bool] = self.initialize_valid_files()
+        # self.valid_files: dict[str, bool] = self.initialize_valid_files()
 
     def create_tables(self) -> None:
         user_table_query = """CREATE TABLE IF NOT EXISTS User (
@@ -214,7 +214,7 @@ class ExampleProgram:
             self.db_connection.commit()
 
     def fetch_data(self, table_name):
-        query = "SELECT COUNT(*) FROM %s"
+        query = "SELECT * FROM %s LIMIT 10"
         self.cursor.execute(query % table_name)
         rows = self.cursor.fetchall()
         # Using tabulate to show the table in a nice way
@@ -222,27 +222,91 @@ class ExampleProgram:
         print(tabulate(rows, headers=self.cursor.column_names))
         return rows
 
-    def show_fields(self, table_name):
+    def show_fields(self, table_name) -> None:
         query = "DESCRIBE %s"
         self.cursor.execute(query % table_name)
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
-    def drop_table(self, table_name):
+    def drop_table(self, table_name) -> None:
         print("Dropping table %s..." % table_name)
         query = "DROP TABLE %s"
         self.cursor.execute(query % table_name)
 
-    def show_tables(self):
+    def show_tables(self) -> None:
         self.cursor.execute("SHOW TABLES")
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
-# 9681756
+    def number_of_rows_in_tables(self) -> None:
+        query = """
+        SELECT COUNT(DISTINCT User.id) AS user_count, 
+        COUNT(DISTINCT Activity.id) AS activity_count, 
+        COUNT(DISTINCT TrackPoint.id) AS trackpoint_count
+        FROM User
+        JOIN Activity ON User.id = Activity.user_id
+        JOIN TrackPoint ON Activity.id = TrackPoint.activity_id;
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        print(tabulate(rows, headers=self.cursor.column_names))
+
+    def avg_activites_per_user(self) -> None:
+        query = """
+        SELECT AVG(activity_count) AS avg_activities_per_user
+        FROM (
+            SELECT User.id, COUNT(Activity.id) AS activity_count
+            FROM User
+            LEFT JOIN Activity ON User.id = Activity.user_id
+            GROUP BY User.id
+        ) AS user_activity_count;
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        print(tabulate(rows, headers=self.cursor.column_names))
+
+    def top_20_users_most_activites(self) -> None:
+        query = """
+        SELECT User.id, COUNT(Activity.id) AS activity_count
+        FROM User 
+        LEFT JOIN Activity ON User.id = Activity.user_id
+        GROUP BY User.id
+        ORDER BY activity_count DESC
+        LIMIT 20
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        print(tabulate(rows, headers=self.cursor.column_names))
+
+    def users_taken_taxi(self) -> None:
+        query = """
+        SELECT DISTINCT User.id
+        FROM User 
+        LEFT JOIN Activity ON User.id = Activity.user_id
+        WHERE Activity.transportation_mode= 'taxi'
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        print(tabulate(rows, headers=self.cursor.column_names))
+
+    def transportation_modes_and_count(self) -> None:
+        query = """
+        SELECT transportation_mode, COUNT(id)
+        FROM Activity
+        WHERE NOT transportation_mode= 'None'
+        GROUP BY transportation_mode
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        print(tabulate(rows, headers=self.cursor.column_names))
+
+
+
 def main():
     program = None
     try:
         program = ExampleProgram()
+        program.top_20_users_most_activites()
 
     except Exception as e:
         print("ERROR: Failed to use database:", e)
