@@ -2,7 +2,9 @@ from DbConnector import DbConnector
 from tabulate import tabulate
 from datetime import datetime
 from itertools import islice
+from haversine import haversine
 import os
+import time
 
 
 class ExampleProgram:
@@ -214,7 +216,7 @@ class ExampleProgram:
             self.db_connection.commit()
 
     def fetch_data(self, table_name):
-        query = "SELECT * FROM %s LIMIT 10"
+        query = "SELECT COUNT(*) FROM %s"
         self.cursor.execute(query % table_name)
         rows = self.cursor.fetchall()
         # Using tabulate to show the table in a nice way
@@ -238,20 +240,20 @@ class ExampleProgram:
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
-    def number_of_rows_in_tables(self) -> None:
+    def task_1(self) -> None:
         query = """
         SELECT COUNT(DISTINCT User.id) AS user_count, 
         COUNT(DISTINCT Activity.id) AS activity_count, 
         COUNT(DISTINCT TrackPoint.id) AS trackpoint_count
         FROM User
-        JOIN Activity ON User.id = Activity.user_id
-        JOIN TrackPoint ON Activity.id = TrackPoint.activity_id;
+        LEFT JOIN Activity ON User.id = Activity.user_id
+        LEFT JOIN TrackPoint ON Activity.id = TrackPoint.activity_id;
         """
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
-    def avg_activites_per_user(self) -> None:
+    def task_2(self) -> None:
         query = """
         SELECT AVG(activity_count) AS avg_activities_per_user
         FROM (
@@ -265,7 +267,7 @@ class ExampleProgram:
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
-    def top_20_users_most_activites(self) -> None:
+    def task_3(self) -> None:
         query = """
         SELECT User.id, COUNT(Activity.id) AS activity_count
         FROM User 
@@ -278,7 +280,7 @@ class ExampleProgram:
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
-    def users_taken_taxi(self) -> None:
+    def task_4(self) -> None:
         query = """
         SELECT DISTINCT User.id
         FROM User 
@@ -289,7 +291,7 @@ class ExampleProgram:
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
-    def transportation_modes_and_count(self) -> None:
+    def task_5(self) -> None:
         query = """
         SELECT transportation_mode, COUNT(id)
         FROM Activity
@@ -300,13 +302,133 @@ class ExampleProgram:
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
+    def task_6a(self) -> None:
+        query = """
+        SELECT YEAR(start_date_time), COUNT(*) AS activity_count
+        FROM Activity
+        GROUP BY YEAR(start_date_time)
+        ORDER BY activity_count DESC
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        print(tabulate(rows, headers=self.cursor.column_names))
+
+    
+    def taks_6b(self) -> None:
+        query = """
+        SELECT YEAR(start_date_time) AS activity_year, 
+        SUM(TIMESTAMPDIFF(HOUR, start_date_time, end_date_time)) AS total_hours
+        FROM Activity
+        GROUP BY YEAR(start_date_time)
+        ORDER BY total_hours DESC;
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        print(tabulate(rows, headers=self.cursor.column_names))
+
+    def task_7(self) -> None:
+        query = """
+        SELECT TrackPoint.lat, TrackPoint.lon, Activity.id, TrackPoint.date_time, Activity.transportation_mode
+        FROM User
+        JOIN Activity ON User.id = Activity.user_id
+        JOIN TrackPoint ON Activity.id = TrackPoint.activity_id
+        WHERE User.id = '112' 
+        AND YEAR(TrackPoint.date_time) = 2008
+        AND Activity.transportation_mode = 'walk'
+        ORDER BY Activity.id DESC, TrackPoint.date_time ASC;
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        distances = {}
+        current_activity_id = None
+        last_coordinates = None
+
+        for row in rows:
+            lat, lon, activity_id, date_time, transportation_mode = row
+            coordinates = (lat, lon)
+
+            if activity_id not in distances:
+                distances[activity_id] = 0.0
+                last_coordinates = None
+        
+            if last_coordinates is not None and current_activity_id == activity_id:
+                distance = haversine(last_coordinates, coordinates)
+                distances[activity_id] += distance
+
+            last_coordinates = coordinates
+            current_activity_id = activity_id
+
+        print(f"Total distance walked in 2008 by user 112: {sum(distances.values())} km")
+    
+    def task_8(self) -> None:
+        query = """
+        SELECT User.id, Activity.id, TrackPoint.altitude, TrackPoint.date_time
+        FROM User
+        JOIN Activity ON User.id = Activity.user_id
+        JOIN TrackPoint ON Activity.id = TrackPoint.activity_id
+        WHERE NOT TrackPoint.altitude = -777
+        ORDER BY User.id DESC, Activity.id ASC, TrackPoint.date_time ASC;
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        altitude_gain = {}
+        last_user = None
+        last_altitude = None
+        last_activity = None
+
+        for row in rows:
+            user, activity, altitude, _ = row
+
+            if user not in altitude_gain:
+                altitude_gain[user] = 0.0
+                last_altitude = None
+                last_activity = None
+
+            if last_user == user and last_activity != activity:
+                last_altitude = None  
+
+            if last_user == user and last_activity == activity:
+                if last_altitude is not None and last_altitude < altitude:
+                    altitude_gain[user] += altitude - last_altitude
+
+            last_altitude = altitude
+            last_user = user
+            last_activity = activity
+
+        sorted_altitude_gain = sorted(altitude_gain.items(), key=lambda x: x[1], reverse=True)
+        headers = ["user", "altitude gained"]
+        print(tabulate(sorted_altitude_gain[:20], headers=headers, floatfmt=".4f"))
+
+    def task_9(self) -> None:
+        query = """
+            WITH InvalidActivities AS (
+                SELECT 
+                    Activity.user_id,
+                    Activity.id AS activity_id
+                FROM Activity
+                JOIN TrackPoint T1 ON Activity.id = T1.activity_id
+                JOIN TrackPoint T2 ON Activity.id = T2.activity_id
+                WHERE T1.id = T2.id - 1
+                AND TIMESTAMPDIFF(MINUTE, T1.date_time, T2.date_time) >= 5
+                GROUP BY Activity.id, Activity.user_id
+            )
+            SELECT 
+                InvalidActivities.user_id,
+                COUNT(InvalidActivities.activity_id) AS invalid_activity_count
+            FROM InvalidActivities
+            GROUP BY InvalidActivities.user_id
+            ORDER BY InvalidActivities.user_id DESC
+            """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        print(tabulate(rows, headers=self.cursor.column_names))
 
 
 def main():
     program = None
     try:
         program = ExampleProgram()
-        program.top_20_users_most_activites()
+        program.task_9()
 
     except Exception as e:
         print("ERROR: Failed to use database:", e)
