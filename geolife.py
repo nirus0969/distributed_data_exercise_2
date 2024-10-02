@@ -216,7 +216,7 @@ class ExampleProgram:
             self.db_connection.commit()
 
     def fetch_data(self, table_name):
-        query = "SELECT COUNT(*) FROM %s"
+        query = "SELECT * FROM %s LIMIT 10"
         self.cursor.execute(query % table_name)
         rows = self.cursor.fetchall()
         # Using tabulate to show the table in a nice way
@@ -313,7 +313,6 @@ class ExampleProgram:
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
-    
     def taks_6b(self) -> None:
         query = """
         SELECT YEAR(start_date_time) AS activity_year, 
@@ -340,7 +339,7 @@ class ExampleProgram:
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
         distances = {}
-        current_activity_id = None
+        last_activity_id = None
         last_coordinates = None
 
         for row in rows:
@@ -350,16 +349,16 @@ class ExampleProgram:
             if activity_id not in distances:
                 distances[activity_id] = 0.0
                 last_coordinates = None
-        
-            if last_coordinates is not None and current_activity_id == activity_id:
+
+            if last_coordinates is not None and last_activity_id == activity_id:
                 distance = haversine(last_coordinates, coordinates)
                 distances[activity_id] += distance
 
             last_coordinates = coordinates
-            current_activity_id = activity_id
+            last_activity_id = activity_id
 
         print(f"Total distance walked in 2008 by user 112: {sum(distances.values())} km")
-    
+
     def task_8(self) -> None:
         query = """
         SELECT User.id, Activity.id, TrackPoint.altitude, TrackPoint.date_time
@@ -385,7 +384,7 @@ class ExampleProgram:
                 last_activity = None
 
             if last_user == user and last_activity != activity:
-                last_altitude = None  
+                last_altitude = None
 
             if last_user == user and last_activity == activity:
                 if last_altitude is not None and last_altitude < altitude:
@@ -395,9 +394,11 @@ class ExampleProgram:
             last_user = user
             last_activity = activity
 
-        sorted_altitude_gain = sorted(altitude_gain.items(), key=lambda x: x[1], reverse=True)
+        sorted_altitude_gain = sorted(
+            altitude_gain.items(), key=lambda x: x[1], reverse=True)
         headers = ["user", "altitude gained"]
-        print(tabulate(sorted_altitude_gain[:20], headers=headers, floatfmt=".4f"))
+        print(tabulate(sorted_altitude_gain[:20],
+              headers=headers, floatfmt=".4f"))
 
     def task_9(self) -> None:
         query = """
@@ -423,12 +424,56 @@ class ExampleProgram:
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
+    def task_10(self) -> None:
+        query = """
+        SELECT DISTINCT User.id
+        FROM User
+        JOIN Activity ON User.id = Activity.user_id
+        JOIN TrackPoint ON Activity.id = TrackPoint.activity_id
+        WHERE TrackPoint.lat LIKE '39.916%' 
+        AND TrackPoint.lon LIKE '116.397%';
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        print(tabulate(rows, headers=self.cursor.column_names, floatfmt=".6f"))
+
+    def task_11(self) -> None:
+        query = """
+            WITH ModeCounts AS (
+                SELECT 
+                    User.id,
+                    Activity.transportation_mode,
+                    COUNT(Activity.transportation_mode) AS mode_count
+                FROM User
+                JOIN Activity ON User.id = Activity.user_id
+                WHERE User.has_labels = true AND Activity.transportation_mode IS NOT NULL
+                GROUP BY User.id, Activity.transportation_mode
+                ),
+                MaxCounts AS (
+                    SELECT 
+                        id, 
+                        MAX(mode_count) AS max_mode_count
+                    FROM ModeCounts
+                    GROUP BY id
+                ) 
+            SELECT 
+                ModeCounts.id, 
+                ModeCounts.transportation_mode AS most_used_transportation_mode,
+                ModeCounts.mode_count
+            FROM ModeCounts
+            JOIN MaxCounts ON ModeCounts.id = MaxCounts.id AND ModeCounts.mode_count = MaxCounts.max_mode_count
+            ORDER BY ModeCounts.id ASC;
+        """
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+        print(tabulate(rows, headers=self.cursor.column_names))
+
 
 def main():
     program = None
     try:
         program = ExampleProgram()
-        program.task_9()
+        program.task_4()
 
     except Exception as e:
         print("ERROR: Failed to use database:", e)
