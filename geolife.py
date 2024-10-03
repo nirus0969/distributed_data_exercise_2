@@ -5,12 +5,14 @@ from itertools import islice
 from haversine import haversine
 import os
 
+
 class ExampleProgram:
 
     def __init__(self):
         self.connection = DbConnector()
         self.db_connection = self.connection.db_connection
         self.cursor = self.connection.cursor
+        # Comment out the two lines directly below after using insert_activity_data() and insert_trackpoint_data()
         self.users_with_labels: list[str] = self.initialize_users_with_labels()
         self.valid_files: dict[str, bool] = self.initialize_valid_files()
 
@@ -469,7 +471,7 @@ def main():
     program = None
     try:
         program = ExampleProgram()
-        program.task_9() #Change this to whatever task you want displayed
+        program.task_9()  # Change this to whatever task you want displayed
 
     except Exception as e:
         print("ERROR: Failed to use database:", e)
