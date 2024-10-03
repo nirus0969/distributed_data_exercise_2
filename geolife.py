@@ -12,7 +12,7 @@ class ExampleProgram:
         self.db_connection = self.connection.db_connection
         self.cursor = self.connection.cursor
         self.users_with_labels: list[str] = self.initialize_users_with_labels()
-        # self.valid_files: dict[str, bool] = self.initialize_valid_files()
+        self.valid_files: dict[str, bool] = self.initialize_valid_files()
 
     def create_tables(self) -> None:
         user_table_query = """CREATE TABLE IF NOT EXISTS User (
