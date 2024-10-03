@@ -313,10 +313,10 @@ class ExampleProgram:
         rows = self.cursor.fetchall()
         print(tabulate(rows, headers=self.cursor.column_names))
 
-    def taks_6b(self) -> None:
+    def task_6b(self) -> None:
         query = """
         SELECT YEAR(start_date_time) AS activity_year, 
-        SUM(TIMESTAMPDIFF(HOUR, start_date_time, end_date_time)) AS total_hours
+        SUM(TIMESTAMPDIFF(MINUTE, start_date_time, end_date_time) / 60) AS total_hours
         FROM Activity
         GROUP BY YEAR(start_date_time)
         ORDER BY total_hours DESC;
@@ -473,7 +473,7 @@ def main():
     program = None
     try:
         program = ExampleProgram()
-        program.task_4()
+        program.task_9() #Change this to whatever task you want displayed
 
     except Exception as e:
         print("ERROR: Failed to use database:", e)

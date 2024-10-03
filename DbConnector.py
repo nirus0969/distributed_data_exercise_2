@@ -1,5 +1,9 @@
+import os
+from dotenv import load_dotenv
 import mysql.connector as mysql
 
+load_dotenv()
+PASSWORD = os.getenv('PASSWORD')
 
 class DbConnector:
     """
@@ -18,7 +22,7 @@ class DbConnector:
                  HOST="0.0.0.0",
                  DATABASE="local_db",
                  USER="root",
-                 PASSWORD="test123"):
+                 PASSWORD=PASSWORD):
         # Connect to the database
         try:
             self.db_connection = mysql.connect(host=HOST, database=DATABASE, user=USER, password=PASSWORD, port=3306)
