@@ -4,8 +4,6 @@ from datetime import datetime
 from itertools import islice
 from haversine import haversine
 import os
-import time
-
 
 class ExampleProgram:
 
@@ -242,12 +240,10 @@ class ExampleProgram:
 
     def task_1(self) -> None:
         query = """
-        SELECT COUNT(DISTINCT User.id) AS user_count, 
-        COUNT(DISTINCT Activity.id) AS activity_count, 
-        COUNT(DISTINCT TrackPoint.id) AS trackpoint_count
-        FROM User
-        LEFT JOIN Activity ON User.id = Activity.user_id
-        LEFT JOIN TrackPoint ON Activity.id = TrackPoint.activity_id;
+        SELECT 
+            (SELECT COUNT(*) FROM User) AS user_count,
+            (SELECT COUNT(*) FROM Activity) AS activity_count,
+            (SELECT COUNT(*) FROM TrackPoint) AS trackpoint_count;
         """
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
@@ -255,7 +251,7 @@ class ExampleProgram:
 
     def task_2(self) -> None:
         query = """
-        SELECT AVG(activity_count) AS avg_activities_per_user
+        SELECT AVG(activity_count)
         FROM (
             SELECT User.id, COUNT(Activity.id) AS activity_count
             FROM User
@@ -274,7 +270,7 @@ class ExampleProgram:
         LEFT JOIN Activity ON User.id = Activity.user_id
         GROUP BY User.id
         ORDER BY activity_count DESC
-        LIMIT 20
+        LIMIT 20;
         """
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
@@ -285,7 +281,7 @@ class ExampleProgram:
         SELECT DISTINCT User.id
         FROM User 
         LEFT JOIN Activity ON User.id = Activity.user_id
-        WHERE Activity.transportation_mode= 'taxi'
+        WHERE Activity.transportation_mode= 'taxi';
         """
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
@@ -296,7 +292,7 @@ class ExampleProgram:
         SELECT transportation_mode, COUNT(id)
         FROM Activity
         WHERE NOT transportation_mode= 'None'
-        GROUP BY transportation_mode
+        GROUP BY transportation_mode;
         """
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
@@ -307,7 +303,7 @@ class ExampleProgram:
         SELECT YEAR(start_date_time), COUNT(*) AS activity_count
         FROM Activity
         GROUP BY YEAR(start_date_time)
-        ORDER BY activity_count DESC
+        ORDER BY activity_count DESC;
         """
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
@@ -407,10 +403,10 @@ class ExampleProgram:
                     Activity.user_id,
                     Activity.id AS activity_id
                 FROM Activity
-                JOIN TrackPoint T1 ON Activity.id = T1.activity_id
-                JOIN TrackPoint T2 ON Activity.id = T2.activity_id
-                WHERE T1.id = T2.id - 1
-                AND TIMESTAMPDIFF(MINUTE, T1.date_time, T2.date_time) >= 5
+                JOIN TrackPoint T_1 ON Activity.id = T_1.activity_id
+                JOIN TrackPoint T_2 ON Activity.id = T_2.activity_id
+                WHERE T_1.id = T_2.id - 1
+                AND TIMESTAMPDIFF(MINUTE, T_1.date_time, T_2.date_time) >= 5
                 GROUP BY Activity.id, Activity.user_id
             )
             SELECT 
@@ -418,7 +414,7 @@ class ExampleProgram:
                 COUNT(InvalidActivities.activity_id) AS invalid_activity_count
             FROM InvalidActivities
             GROUP BY InvalidActivities.user_id
-            ORDER BY InvalidActivities.user_id DESC
+            ORDER BY InvalidActivities.user_id DESC;
             """
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
@@ -439,30 +435,30 @@ class ExampleProgram:
 
     def task_11(self) -> None:
         query = """
-            WITH ModeCounts AS (
-                SELECT 
-                    User.id,
-                    Activity.transportation_mode,
-                    COUNT(Activity.transportation_mode) AS mode_count
-                FROM User
-                JOIN Activity ON User.id = Activity.user_id
-                WHERE User.has_labels = true AND Activity.transportation_mode IS NOT NULL
-                GROUP BY User.id, Activity.transportation_mode
-                ),
-                MaxCounts AS (
-                    SELECT 
-                        id, 
-                        MAX(mode_count) AS max_mode_count
-                    FROM ModeCounts
-                    GROUP BY id
-                ) 
+        WITH TransportationCount AS (
             SELECT 
-                ModeCounts.id, 
-                ModeCounts.transportation_mode AS most_used_transportation_mode,
-                ModeCounts.mode_count
-            FROM ModeCounts
-            JOIN MaxCounts ON ModeCounts.id = MaxCounts.id AND ModeCounts.mode_count = MaxCounts.max_mode_count
-            ORDER BY ModeCounts.id ASC;
+                User.id,
+                Activity.transportation_mode,
+                COUNT(Activity.transportation_mode) AS mode_count
+            FROM User
+            JOIN Activity ON User.id = Activity.user_id
+            WHERE User.has_labels = true AND Activity.transportation_mode IS NOT NULL
+            GROUP BY User.id, Activity.transportation_mode
+        ),
+        RankedTransportation AS (
+            SELECT 
+                id, 
+                transportation_mode, 
+                mode_count,
+                ROW_NUMBER() OVER (PARTITION BY id ORDER BY mode_count DESC) AS mode_rank
+            FROM TransportationCount
+        ) 
+        SELECT 
+            id, 
+            transportation_mode AS most_used_transportation_mode
+        FROM RankedTransportation
+        WHERE mode_rank = 1
+        ORDER BY id ASC;
         """
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
