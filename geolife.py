@@ -12,7 +12,8 @@ class ExampleProgram:
         self.connection = DbConnector()
         self.db_connection = self.connection.db_connection
         self.cursor = self.connection.cursor
-        # Comment out the two lines directly below after using insert_activity_data() and insert_trackpoint_data()
+        # Comment out the two lines directly below after using functions: insert_activity_data(), 
+        # insert_trackpoint_data(), insert_user_data() as these slow down class initialization.
         self.users_with_labels: list[str] = self.initialize_users_with_labels()
         self.valid_files: dict[str, bool] = self.initialize_valid_files()
 
@@ -302,9 +303,25 @@ class ExampleProgram:
 
     def task_6a(self) -> None:
         query = """
-        SELECT YEAR(start_date_time), COUNT(*) AS activity_count
-        FROM Activity
-        GROUP BY YEAR(start_date_time)
+        WITH RECURSIVE year_series AS (
+            SELECT 
+                id,
+                YEAR(start_date_time) AS activity_year,
+                YEAR(end_date_time) AS end_year
+            FROM Activity
+            UNION ALL
+            SELECT
+                id,
+                activity_year + 1,
+                end_year
+            FROM year_series
+            WHERE activity_year < end_year
+        )
+        SELECT
+            activity_year AS year,
+            COUNT(DISTINCT id) AS activity_count
+        FROM year_series
+        GROUP BY activity_year
         ORDER BY activity_count DESC;
         """
         self.cursor.execute(query)
@@ -312,20 +329,42 @@ class ExampleProgram:
         print(tabulate(rows, headers=self.cursor.column_names))
 
     def task_6b(self) -> None:
+        total_hours = {}
         query = """
-        SELECT YEAR(start_date_time) AS activity_year, 
-        SUM(TIMESTAMPDIFF(MINUTE, start_date_time, end_date_time) / 60) AS total_hours
+        SELECT id, start_date_time, end_date_time
         FROM Activity
-        GROUP BY YEAR(start_date_time)
-        ORDER BY total_hours DESC;
-        """
+            """
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
-        print(tabulate(rows, headers=self.cursor.column_names))
+
+        for row in rows:
+            id = row[0]
+            start_year = row[1].year
+            end_year = row[2].year
+
+            if start_year == end_year:
+                hours = (row[2] - row[1]).total_seconds() / 3600
+                total_hours[start_year] = total_hours.get(start_year, 0) + hours
+            else:
+                end_of_start_year = datetime(start_year, 12, 31, 23, 59, 59)
+                hours_start_year = (end_of_start_year - row[1]).total_seconds() / 3600
+                total_hours[start_year] = total_hours.get(start_year, 0) + hours_start_year
+
+                start_of_end_year = datetime(end_year, 1, 1, 0, 0, 0)
+                hours_end_year = (row[2] - start_of_end_year).total_seconds() / 3600
+                total_hours[end_year] = total_hours.get(end_year, 0) + hours_end_year
+        sorted_total_hours = sorted(total_hours.items(), key=lambda x: x[1], reverse=True)
+        headers = ["Year", "total hours"]
+        print(tabulate(sorted_total_hours[:20],headers=headers, floatfmt=".4f"))
 
     def task_7(self) -> None:
         query = """
-        SELECT TrackPoint.lat, TrackPoint.lon, Activity.id, TrackPoint.date_time, Activity.transportation_mode
+        SELECT 
+            TrackPoint.lat, 
+            TrackPoint.lon, 
+            Activity.id, 
+            TrackPoint.date_time, 
+            Activity.transportation_mode
         FROM User
         JOIN Activity ON User.id = Activity.user_id
         JOIN TrackPoint ON Activity.id = TrackPoint.activity_id
@@ -359,12 +398,19 @@ class ExampleProgram:
 
     def task_8(self) -> None:
         query = """
-        SELECT User.id, Activity.id, TrackPoint.altitude, TrackPoint.date_time
+        SELECT 
+            User.id, 
+            Activity.id, 
+            TrackPoint.altitude, 
+            TrackPoint.date_time
         FROM User
         JOIN Activity ON User.id = Activity.user_id
         JOIN TrackPoint ON Activity.id = TrackPoint.activity_id
         WHERE NOT TrackPoint.altitude = -777
-        ORDER BY User.id DESC, Activity.id ASC, TrackPoint.date_time ASC;
+        ORDER BY 
+            User.id DESC, 
+            Activity.id ASC, 
+            TrackPoint.date_time ASC;
         """
         self.cursor.execute(query)
         rows = self.cursor.fetchall()
@@ -394,7 +440,7 @@ class ExampleProgram:
 
         sorted_altitude_gain = sorted(
             altitude_gain.items(), key=lambda x: x[1], reverse=True)
-        headers = ["user", "altitude gained"]
+        headers = ["id", "total meters gained per user"]
         print(tabulate(sorted_altitude_gain[:20],
               headers=headers, floatfmt=".4f"))
 
@@ -456,7 +502,7 @@ class ExampleProgram:
             FROM TransportationCount
         ) 
         SELECT 
-            id, 
+            id as user_id, 
             transportation_mode AS most_used_transportation_mode
         FROM RankedTransportation
         WHERE mode_rank = 1
@@ -471,7 +517,13 @@ def main():
     program = None
     try:
         program = ExampleProgram()
-        program.task_9()  # Change this to whatever task you want displayed
+        program.drop_table("TrackPoint")
+        program.drop_table("Activity")
+        program.drop_table("User")
+        program.create_tables()
+        program.insert_user_data()
+        program.insert_activity_data()
+        program.insert_trackpoint_data()
 
     except Exception as e:
         print("ERROR: Failed to use database:", e)
